@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+
+enum UserRole {
+  admin
+  teacher
+}
+
+enum MaterialMode {
+  normal
+  self_study
+}
+
+model User {
+  id           String      @id @default(uuid()) @db.Uuid
+  loginId      String      @unique @map("login_id")
+  passwordHash String      @map("password_hash")
+  role         UserRole    @default(teacher)
+  createdAt    DateTime    @default(now()) @map("created_at")
+  userClasses  UserClass[]
+
+  @@map("users")
+}
+
+model SchoolClass {
+  id               String            @id @default(uuid()) @db.Uuid
+  year             Int
+  classCode        String            @map("class_code")
+  name             String
+  createdAt        DateTime          @default(now()) @map("created_at")
+  students         Student[]
+  dailyAssignments DailyAssignment[]
+  submissions      Submission[]
+  userClasses      UserClass[]
+
+  @@unique([year, classCode])
+  @@map("classes")
+}
+
+model UserClass {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  classId   String   @map("class_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classRoom SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, classId])
+  @@map("user_classes")
+}
+
+model Student {
+  id          String       @id @default(uuid()) @db.Uuid
+  classId     String       @map("class_id") @db.Uuid
+  number      Int
+  displayName String       @map("display_name")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  classRoom   SchoolClass  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  booklets    Booklet[]
+  submissions Submission[]
+
+  @@unique([classId, number])
+  @@map("students")
+}
+
+model Material {
+  id              String            @id @default(uuid()) @db.Uuid
+  code            String            @unique
+  name            String
+  pointsPerSubmit Int               @default(1) @map("points_per_submit")
+  mode            MaterialMode      @default(normal)
+  isActive        Boolean           @default(true) @map("is_active")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  booklets        Booklet[]
+  dailyAssignments DailyAssignment[]
+  submissions     Submission[]
+
+  @@map("materials")
+}
+
+model Booklet {
+  id         String       @id @default(uuid()) @db.Uuid
+  studentId  String       @map("student_id") @db.Uuid
+  materialId String       @map("material_id") @db.Uuid
+  qrPayload  String       @unique @map("qr_payload")
+  isActive   Boolean      @default(true) @map("is_active")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  student    Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  material   Material     @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+
+  @@unique([studentId, materialId])
+  @@map("booklets")
+}
+
+model DailyAssignment {
+  id             String       @id @default(uuid()) @db.Uuid
+  classId        String       @map("class_id") @db.Uuid
+  materialId     String       @map("material_id") @db.Uuid
+  date           DateTime     @db.Date
+  title          String
+  pointsOverride Int?         @map("points_override")
+  isRequired     Boolean      @default(true) @map("is_required")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  classRoom      SchoolClass  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  material       Material     @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  submissions    Submission[]
+
+  @@unique([classId, materialId, date])
+  @@map("daily_assignments")
+}
+
+model Submission {
+  id                String           @id @default(uuid()) @db.Uuid
+  timestamp         DateTime         @default(now())
+  bookletId         String           @map("booklet_id") @db.Uuid
+  classId           String           @map("class_id") @db.Uuid
+  materialId        String           @map("material_id") @db.Uuid
+  studentId         String           @map("student_id") @db.Uuid
+  dailyAssignmentId String?          @map("daily_assignment_id") @db.Uuid
+  pointsAwarded     Int              @map("points_awarded")
+  pagesDone         Int?             @map("pages_done")
+  isVoid            Boolean          @default(false) @map("is_void")
+  voidReason        String?          @map("void_reason")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  booklet           Booklet          @relation(fields: [bookletId], references: [id], onDelete: Cascade)
+  classRoom         SchoolClass      @relation(fields: [classId], references: [id], onDelete: Cascade)
+  material          Material         @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  student           Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  dailyAssignment   DailyAssignment? @relation(fields: [dailyAssignmentId], references: [id], onDelete: SetNull)
+
+  @@index([classId, timestamp])
+  @@index([dailyAssignmentId, isVoid])
+  @@index([studentId, isVoid])
+  @@map("submissions")
+}
